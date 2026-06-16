@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import "./index.css";
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 const weaponOptions = [
   "Nameless Sword",
@@ -96,7 +101,49 @@ function normalizePlayer(player) {
     assignedDay: player.assignedDay || "",
     assignedEvent: eventOptions.includes(normalizeEventName(player.assignedEvent)) ? normalizeEventName(player.assignedEvent) : "",
     assignedTeam: player.assignedTeam || "",
+    sortOrder: Number.isFinite(Number(player.sortOrder)) ? Number(player.sortOrder) : 0,
   };
+}
+
+function rowToPlayer(row) {
+  return normalizePlayer({
+    id: row.id,
+    playerName: row.player_name,
+    discordName: row.discord_name,
+    role: row.role,
+    weapon1: row.weapon_1,
+    weapon2: row.weapon_2,
+    saturday: Array.isArray(row.saturday_games) && row.saturday_games.length > 0,
+    sunday: Array.isArray(row.sunday_games) && row.sunday_games.length > 0,
+    saturdayEvents: Array.isArray(row.saturday_games) ? row.saturday_games : [],
+    sundayEvents: Array.isArray(row.sunday_games) ? row.sunday_games : [],
+    notes: row.notes,
+    assignedDay: row.assigned_day,
+    assignedEvent: row.assigned_game,
+    assignedTeam: row.assigned_team,
+    sortOrder: row.sort_order,
+  });
+}
+
+function playerToRow(player, includeId = true) {
+  const row = {
+    player_name: player.playerName || "",
+    discord_name: player.discordName || "",
+    role: player.role || "DPS",
+    weapon_1: player.weapon1 || "Nameless Sword",
+    weapon_2: player.weapon2 || "Strategic Sword",
+    notes: player.notes || "",
+    saturday_games: Array.isArray(player.saturdayEvents) ? player.saturdayEvents : [],
+    sunday_games: Array.isArray(player.sundayEvents) ? player.sundayEvents : [],
+    assigned_day: player.assignedDay || "",
+    assigned_game: player.assignedEvent || "",
+    assigned_team: player.assignedTeam || "",
+    sort_order: Number.isFinite(Number(player.sortOrder)) ? Number(player.sortOrder) : 0,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (includeId && player.id) row.id = player.id;
+  return row;
 }
 
 function getInitialRegistrations() {
@@ -111,6 +158,17 @@ function getInitialRegistrations() {
   }
 
   return starterRegistrations.map(normalizePlayer);
+}
+
+function normalizeTeamsByDay(value) {
+  if (value && Array.isArray(value.Saturday) && Array.isArray(value.Sunday)) {
+    return {
+      Saturday: value.Saturday.length ? value.Saturday : DEFAULT_TEAMS,
+      Sunday: value.Sunday.length ? value.Sunday : DEFAULT_TEAMS,
+    };
+  }
+
+  return { Saturday: DEFAULT_TEAMS, Sunday: DEFAULT_TEAMS };
 }
 
 function getInitialTeams() {
@@ -139,16 +197,46 @@ export default function App() {
   const [page, setPage] = useState("guild-war");
   const [activeDay, setActiveDay] = useState("Saturday");
   const [activeEvent, setActiveEvent] = useState("League Game");
-  const [registrations, setRegistrations] = useState(getInitialRegistrations);
+  const [registrations, setRegistrations] = useState([]);
   const [teamsByDay, setTeamsByDay] = useState(getInitialTeams);
+  const [isLoading, setIsLoading] = useState(true);
+  const [databaseMessage, setDatabaseMessage] = useState("");
   const [newTeamName, setNewTeamName] = useState("");
   const [form, setForm] = useState(emptyForm());
   const [adminUnlocked, setAdminUnlocked] = useState(() => localStorage.getItem(ADMIN_KEY) === "true");
   const [adminPassword, setAdminPassword] = useState("");
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(registrations));
-  }, [registrations]);
+    if (!supabase) {
+      setRegistrations(getInitialRegistrations());
+      setIsLoading(false);
+      setDatabaseMessage("Supabase is not connected yet. Using local demo data.");
+      return;
+    }
+
+    fetchRegistrations();
+    fetchTeams();
+
+    const timer = window.setInterval(() => {
+      fetchRegistrations(false);
+      fetchTeams(false);
+    }, 5000);
+
+    const channel = supabase
+      .channel("guild-war-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "registrations" }, () => {
+        fetchRegistrations(false);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "guild_settings" }, () => {
+        fetchTeams(false);
+      })
+      .subscribe();
+
+    return () => {
+      window.clearInterval(timer);
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(TEAMS_STORAGE_KEY, JSON.stringify(teamsByDay));
@@ -228,6 +316,91 @@ export default function App() {
     );
   }, [visibleRegistrations]);
 
+  async function fetchRegistrations(showLoading = true) {
+    if (!supabase) return;
+
+    if (showLoading) setIsLoading(true);
+    const { data, error } = await supabase
+      .from("registrations")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Supabase load error:", error);
+      setDatabaseMessage(`Database load error: ${error.message}`);
+      setIsLoading(false);
+      return;
+    }
+
+    setRegistrations((data || []).map(rowToPlayer));
+    setDatabaseMessage("");
+    setIsLoading(false);
+  }
+
+  async function fetchTeams() {
+    if (!supabase) return;
+
+    const { data, error } = await supabase
+      .from("guild_settings")
+      .select("setting_value")
+      .eq("setting_key", "teams_by_day")
+      .maybeSingle();
+
+    if (error) {
+      console.error("Supabase teams load error:", error);
+      return;
+    }
+
+    if (data?.setting_value) {
+      setTeamsByDay(normalizeTeamsByDay(data.setting_value));
+    }
+  }
+
+  async function syncTeams(nextTeams) {
+    if (!supabase) return;
+
+    const { error } = await supabase.from("guild_settings").upsert({
+      setting_key: "teams_by_day",
+      setting_value: nextTeams,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.error("Supabase team save error:", error);
+      alert(`Could not save team list online: ${error.message}`);
+    }
+  }
+
+  async function syncOnePlayer(player) {
+    if (!supabase || !player?.id) return;
+    const { error } = await supabase
+      .from("registrations")
+      .update(playerToRow(player, false))
+      .eq("id", player.id);
+
+    if (error) {
+      console.error("Supabase update error:", error);
+      alert(`Could not save change online: ${error.message}`);
+    }
+  }
+
+  async function syncAllPlayers(nextRegistrations) {
+    if (!supabase) return;
+    const rows = nextRegistrations.map((player, index) =>
+      playerToRow({ ...player, sortOrder: index + 1 }, true)
+    );
+
+    const { error } = await supabase.from("registrations").upsert(rows);
+    if (error) {
+      console.error("Supabase sync error:", error);
+      alert(`Could not save team change online: ${error.message}`);
+      return;
+    }
+
+    setRegistrations(rows.map(rowToPlayer));
+  }
+
   function getTeamPlayers(teamName) {
     return assigned.filter((player) => player.assignedTeam === teamName);
   }
@@ -259,7 +432,7 @@ export default function App() {
     updatePlayer(playerId, dayField, nextEvents);
   }
 
-  function submitRegistration(event) {
+  async function submitRegistration(event) {
     event.preventDefault();
 
     if (!form.playerName.trim()) {
@@ -282,18 +455,31 @@ export default function App() {
       return;
     }
 
-    const newPlayer = {
-      id: Date.now(),
+    const newPlayer = normalizePlayer({
       ...form,
       playerName: form.playerName.trim(),
       discordName: form.discordName.trim(),
       notes: form.notes.trim(),
+      saturdayEvents: form.saturday ? form.saturdayEvents : [],
+      sundayEvents: form.sunday ? form.sundayEvents : [],
       assignedDay: "",
       assignedEvent: "",
       assignedTeam: "",
-    };
+      sortOrder: Date.now(),
+    });
 
-    setRegistrations((current) => [newPlayer, ...current]);
+    if (supabase) {
+      const { error } = await supabase.from("registrations").insert(playerToRow(newPlayer, false));
+      if (error) {
+        console.error("Supabase insert error:", error);
+        alert(`Registration failed: ${error.message}`);
+        return;
+      }
+      await fetchRegistrations(false);
+    } else {
+      setRegistrations((current) => [newPlayer, ...current]);
+    }
+
     setForm(emptyForm());
     setPage("guild-war");
     alert("Registration submitted.");
@@ -316,42 +502,55 @@ export default function App() {
     setPage("guild-war");
   }
 
-  function updatePlayer(id, field, value) {
-    setRegistrations((current) =>
-      current.map((player) => {
-        if (player.id !== id) return player;
-        const nextPlayer = { ...player, [field]: value };
+  function buildUpdatedPlayer(player, field, value) {
+    const nextPlayer = { ...player, [field]: value };
 
-        if (field === "saturday" && !value && player.assignedDay === "Saturday") {
-          nextPlayer.assignedDay = "";
-          nextPlayer.assignedEvent = "";
-          nextPlayer.assignedTeam = "";
-        }
+    if (field === "saturday") {
+      nextPlayer.saturdayEvents = value ? nextPlayer.saturdayEvents : [];
+      if (!value && player.assignedDay === "Saturday") {
+        nextPlayer.assignedDay = "";
+        nextPlayer.assignedEvent = "";
+        nextPlayer.assignedTeam = "";
+      }
+    }
 
-        if (field === "sunday" && !value && player.assignedDay === "Sunday") {
-          nextPlayer.assignedDay = "";
-          nextPlayer.assignedEvent = "";
-          nextPlayer.assignedTeam = "";
-        }
+    if (field === "sunday") {
+      nextPlayer.sundayEvents = value ? nextPlayer.sundayEvents : [];
+      if (!value && player.assignedDay === "Sunday") {
+        nextPlayer.assignedDay = "";
+        nextPlayer.assignedEvent = "";
+        nextPlayer.assignedTeam = "";
+      }
+    }
 
-        if (field === "saturdayEvents" && player.assignedDay === "Saturday" && !value.includes(player.assignedEvent)) {
-          nextPlayer.assignedDay = "";
-          nextPlayer.assignedEvent = "";
-          nextPlayer.assignedTeam = "";
-        }
+    if (field === "saturdayEvents" && player.assignedDay === "Saturday" && !value.includes(player.assignedEvent)) {
+      nextPlayer.assignedDay = "";
+      nextPlayer.assignedEvent = "";
+      nextPlayer.assignedTeam = "";
+    }
 
-        if (field === "sundayEvents" && player.assignedDay === "Sunday" && !value.includes(player.assignedEvent)) {
-          nextPlayer.assignedDay = "";
-          nextPlayer.assignedEvent = "";
-          nextPlayer.assignedTeam = "";
-        }
+    if (field === "sundayEvents" && player.assignedDay === "Sunday" && !value.includes(player.assignedEvent)) {
+      nextPlayer.assignedDay = "";
+      nextPlayer.assignedEvent = "";
+      nextPlayer.assignedTeam = "";
+    }
 
-        return nextPlayer;
-      })
-    );
+    return nextPlayer;
   }
 
-  function assignPlayer(id, teamName, targetPlayerId = null) {
+  async function updatePlayer(id, field, value) {
+    let changedPlayer = null;
+    const nextRegistrations = registrations.map((player) => {
+      if (player.id !== id) return player;
+      changedPlayer = buildUpdatedPlayer(player, field, value);
+      return changedPlayer;
+    });
+
+    setRegistrations(nextRegistrations);
+    if (changedPlayer) await syncOnePlayer(changedPlayer);
+  }
+
+  async function assignPlayer(id, teamName, targetPlayerId = null) {
     const playerToAssign = registrations.find((player) => player.id === id);
     const alreadyAssignedThisDay =
       playerToAssign?.assignedDay === activeDay && playerToAssign?.assignedEvent === activeEvent && Boolean(playerToAssign?.assignedTeam);
@@ -361,66 +560,56 @@ export default function App() {
       return;
     }
 
-    setRegistrations((current) => {
-      const movingIndex = current.findIndex((player) => player.id === id);
-      if (movingIndex < 0) return current;
+    const current = registrations;
+    const movingIndex = current.findIndex((player) => player.id === id);
+    if (movingIndex < 0) return;
 
-      const movingPlayer = current[movingIndex];
+    const movingPlayer = current[movingIndex];
+    let next = current;
 
-      if (!teamName) {
-        const movedPlayer = {
-          ...movingPlayer,
-          assignedDay: "",
-          assignedEvent: "",
-          assignedTeam: "",
+    if (!teamName) {
+      const movedPlayer = {
+        ...movingPlayer,
+        assignedDay: "",
+        assignedEvent: "",
+        assignedTeam: "",
+      };
+
+      const withoutMoving = current.filter((player) => player.id !== id);
+      next = [movedPlayer, ...withoutMoving];
+      setRegistrations(next);
+      await syncAllPlayers(next);
+      return;
+    }
+
+    const targetIndex = targetPlayerId
+      ? current.findIndex((player) => player.id === targetPlayerId)
+      : -1;
+
+    if (targetIndex >= 0) {
+      const targetPlayer = current[targetIndex];
+      const movingIsAssigned =
+        movingPlayer.assignedDay === activeDay && movingPlayer.assignedEvent === activeEvent && Boolean(movingPlayer.assignedTeam);
+      const targetIsAssigned =
+        targetPlayer.assignedDay === activeDay && targetPlayer.assignedEvent === activeEvent && Boolean(targetPlayer.assignedTeam);
+
+      if (movingIsAssigned && targetIsAssigned) {
+        next = [...current];
+        next[movingIndex] = {
+          ...targetPlayer,
+          assignedDay: movingPlayer.assignedDay,
+          assignedEvent: movingPlayer.assignedEvent,
+          assignedTeam: movingPlayer.assignedTeam,
         };
-
-        const withoutMoving = current.filter((player) => player.id !== id);
-        return [movedPlayer, ...withoutMoving];
-      }
-
-      const targetIndex = targetPlayerId
-        ? current.findIndex((player) => player.id === targetPlayerId)
-        : -1;
-
-      if (targetIndex >= 0) {
-        const targetPlayer = current[targetIndex];
-        const movingIsAssigned =
-          movingPlayer.assignedDay === activeDay && movingPlayer.assignedEvent === activeEvent && Boolean(movingPlayer.assignedTeam);
-        const targetIsAssigned =
-          targetPlayer.assignedDay === activeDay && targetPlayer.assignedEvent === activeEvent && Boolean(targetPlayer.assignedTeam);
-
-        // If both players are already assigned on the active day, swap their exact positions.
-        // This lets admin drag D onto B and have D/B trade places, even inside the same team.
-        if (movingIsAssigned && targetIsAssigned) {
-          const next = [...current];
-          next[movingIndex] = {
-            ...targetPlayer,
-            assignedDay: movingPlayer.assignedDay,
-            assignedEvent: movingPlayer.assignedEvent,
-            assignedTeam: movingPlayer.assignedTeam,
-          };
-          next[targetIndex] = {
-            ...movingPlayer,
-            assignedDay: targetPlayer.assignedDay,
-            assignedEvent: targetPlayer.assignedEvent,
-            assignedTeam: targetPlayer.assignedTeam,
-          };
-          return next;
-        }
-
-        // If dragging from Unassigned onto a team player, add the dragged player above the target.
-        const movedPlayer = {
+        next[targetIndex] = {
           ...movingPlayer,
-          assignedDay: activeDay,
-          assignedEvent: activeEvent,
-          assignedTeam: teamName,
+          assignedDay: targetPlayer.assignedDay,
+          assignedEvent: targetPlayer.assignedEvent,
+          assignedTeam: targetPlayer.assignedTeam,
         };
-        const withoutMoving = current.filter((player) => player.id !== id);
-        const newTargetIndex = withoutMoving.findIndex((player) => player.id === targetPlayerId);
-        const next = [...withoutMoving];
-        next.splice(Math.max(0, newTargetIndex), 0, movedPlayer);
-        return next;
+        setRegistrations(next);
+        await syncAllPlayers(next);
+        return;
       }
 
       const movedPlayer = {
@@ -429,20 +618,35 @@ export default function App() {
         assignedEvent: activeEvent,
         assignedTeam: teamName,
       };
-
       const withoutMoving = current.filter((player) => player.id !== id);
-      let insertAfterIndex = -1;
+      const newTargetIndex = withoutMoving.findIndex((player) => player.id === targetPlayerId);
+      next = [...withoutMoving];
+      next.splice(Math.max(0, newTargetIndex), 0, movedPlayer);
+      setRegistrations(next);
+      await syncAllPlayers(next);
+      return;
+    }
 
-      withoutMoving.forEach((player, index) => {
-        if (player.assignedDay === activeDay && player.assignedEvent === activeEvent && player.assignedTeam === teamName) {
-          insertAfterIndex = index;
-        }
-      });
+    const movedPlayer = {
+      ...movingPlayer,
+      assignedDay: activeDay,
+      assignedEvent: activeEvent,
+      assignedTeam: teamName,
+    };
 
-      const next = [...withoutMoving];
-      next.splice(insertAfterIndex + 1, 0, movedPlayer);
-      return next;
+    const withoutMoving = current.filter((player) => player.id !== id);
+    let insertAfterIndex = -1;
+
+    withoutMoving.forEach((player, index) => {
+      if (player.assignedDay === activeDay && player.assignedEvent === activeEvent && player.assignedTeam === teamName) {
+        insertAfterIndex = index;
+      }
     });
+
+    next = [...withoutMoving];
+    next.splice(insertAfterIndex + 1, 0, movedPlayer);
+    setRegistrations(next);
+    await syncAllPlayers(next);
   }
 
   function handleDragStartPlayer(event, playerId) {
@@ -457,14 +661,14 @@ export default function App() {
     if (jsonData) {
       try {
         const parsed = JSON.parse(jsonData);
-        if (parsed?.playerId) return Number(parsed.playerId);
+        if (parsed?.playerId) return String(parsed.playerId);
       } catch {
         // Fall back to text/plain below.
       }
     }
 
     const rawId = event.dataTransfer.getData("text/plain");
-    return Number(rawId);
+    return String(rawId);
   }
 
   function handleDropPlayer(event, teamName, targetPlayerId = null) {
@@ -483,7 +687,7 @@ export default function App() {
     event.dataTransfer.dropEffect = "move";
   }
 
-  function addTeam() {
+  async function addTeam() {
     const cleanName = newTeamName.trim();
     const nextName = cleanName || `Team ${activeTeamOptions.length + 1}`;
 
@@ -492,14 +696,17 @@ export default function App() {
       return;
     }
 
-    setTeamsByDay((current) => ({
-      ...current,
-      [activeDay]: [...(current[activeDay] || []), nextName],
-    }));
+    const nextTeams = {
+      ...teamsByDay,
+      [activeDay]: [...(teamsByDay[activeDay] || []), nextName],
+    };
+
+    setTeamsByDay(nextTeams);
     setNewTeamName("");
+    await syncTeams(nextTeams);
   }
 
-  function removeTeam(teamName) {
+  async function removeTeam(teamName) {
     const teamPlayers = getTeamPlayers(teamName);
     const answer = window.confirm(
       teamPlayers.length > 0
@@ -508,46 +715,63 @@ export default function App() {
     );
     if (!answer) return;
 
-    setTeamsByDay((current) => ({
-      ...current,
-      [activeDay]: (current[activeDay] || []).filter((team) => team !== teamName),
-    }));
+    const nextTeams = {
+      ...teamsByDay,
+      [activeDay]: (teamsByDay[activeDay] || []).filter((team) => team !== teamName),
+    };
 
-    setRegistrations((current) =>
-      current.map((player) =>
-        player.assignedDay === activeDay && player.assignedEvent === activeEvent && player.assignedTeam === teamName
-          ? { ...player, assignedDay: "", assignedEvent: "", assignedTeam: "" }
-          : player
-      )
+    setTeamsByDay(nextTeams);
+    await syncTeams(nextTeams);
+
+    const nextRegistrations = registrations.map((player) =>
+      player.assignedDay === activeDay && player.assignedEvent === activeEvent && player.assignedTeam === teamName
+        ? { ...player, assignedDay: "", assignedEvent: "", assignedTeam: "" }
+        : player
     );
+
+    setRegistrations(nextRegistrations);
+    await syncAllPlayers(nextRegistrations);
   }
 
-  function movePlayerToDay(id, day) {
-    setRegistrations((current) =>
-      current.map((player) => {
-        if (player.id !== id) return player;
-        const dayField = day === "Saturday" ? "saturdayEvents" : "sundayEvents";
-        const eventList = Array.isArray(player[dayField]) ? player[dayField] : [];
+  async function movePlayerToDay(id, day) {
+    let changedPlayer = null;
+    const nextRegistrations = registrations.map((player) => {
+      if (player.id !== id) return player;
+      const dayField = day === "Saturday" ? "saturdayEvents" : "sundayEvents";
+      const eventList = Array.isArray(player[dayField]) ? player[dayField] : [];
 
-        return {
-          ...player,
-          assignedDay: "",
-          assignedEvent: "",
-          assignedTeam: "",
-          saturday: day === "Saturday" ? true : player.saturday,
-          sunday: day === "Sunday" ? true : player.sunday,
-          [dayField]: eventList.includes(activeEvent) ? eventList : [...eventList, activeEvent],
-        };
-      })
-    );
+      changedPlayer = {
+        ...player,
+        assignedDay: "",
+        assignedEvent: "",
+        assignedTeam: "",
+        saturday: day === "Saturday" ? true : player.saturday,
+        sunday: day === "Sunday" ? true : player.sunday,
+        [dayField]: eventList.includes(activeEvent) ? eventList : [...eventList, activeEvent],
+      };
+
+      return changedPlayer;
+    });
+
+    setRegistrations(nextRegistrations);
+    if (changedPlayer) await syncOnePlayer(changedPlayer);
     setActiveDay(day);
   }
 
-  function removePlayer(id) {
+  async function removePlayer(id) {
     const answer = window.confirm("Remove this registration?");
     if (!answer) return;
 
     setRegistrations((current) => current.filter((player) => player.id !== id));
+
+    if (supabase) {
+      const { error } = await supabase.from("registrations").delete().eq("id", id);
+      if (error) {
+        console.error("Supabase delete error:", error);
+        alert(`Could not remove registration online: ${error.message}`);
+        await fetchRegistrations(false);
+      }
+    }
   }
 
   function resetDemoData() {
@@ -557,17 +781,18 @@ export default function App() {
     setTeamsByDay({ Saturday: DEFAULT_TEAMS, Sunday: DEFAULT_TEAMS });
   }
 
-  function clearAssignmentsForDay() {
+  async function clearAssignmentsForDay() {
     const answer = window.confirm(`Clear all ${activeDay} ${activeEvent} team assignments?`);
     if (!answer) return;
 
-    setRegistrations((current) =>
-      current.map((player) =>
-        player.assignedDay === activeDay
-          ? { ...player, assignedDay: "", assignedEvent: "", assignedTeam: "" }
-          : player
-      )
+    const nextRegistrations = registrations.map((player) =>
+      player.assignedDay === activeDay && player.assignedEvent === activeEvent
+        ? { ...player, assignedDay: "", assignedEvent: "", assignedTeam: "" }
+        : player
     );
+
+    setRegistrations(nextRegistrations);
+    await syncAllPlayers(nextRegistrations);
   }
 
   function copyDiscordPlan() {
@@ -627,6 +852,8 @@ export default function App() {
       </header>
 
       <main className="page">
+        {databaseMessage && <section className="warning-card">{databaseMessage}</section>}
+
         {page === "guild-war" && (
           <>
             <section className="hero-card">
@@ -660,6 +887,10 @@ export default function App() {
                 </div>
               </div>
             </section>
+
+            {isLoading ? (
+              <section className="panel"><div className="empty">Loading online registrations...</div></section>
+            ) : null}
 
             <div className="summary-row">
               <SummaryBox title="Registered" value={visibleRegistrations.length} />
@@ -883,7 +1114,7 @@ export default function App() {
             {!adminUnlocked ? (
               <form onSubmit={loginAdmin} className="admin-login">
                 <p>Admin password:</p>
-                <code>admin</code>
+                <code>BEAR</code>
                 <label>
                   Admin password
                   <input
