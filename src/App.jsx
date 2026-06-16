@@ -774,6 +774,36 @@ export default function App() {
     }
   }
 
+
+  async function resetAllSignUps() {
+    const firstConfirm = window.confirm(
+      "Reset all sign ups? This will delete every registration and show 0 registered players for everyone."
+    );
+    if (!firstConfirm) return;
+
+    const secondConfirm = window.confirm(
+      "Are you sure? This cannot be undone unless you have a Supabase backup."
+    );
+    if (!secondConfirm) return;
+
+    if (supabase) {
+      const { error } = await supabase
+        .from("registrations")
+        .delete()
+        .not("id", "is", null);
+
+      if (error) {
+        console.error("Supabase reset sign ups error:", error);
+        alert(`Could not reset sign ups online: ${error.message}`);
+        await fetchRegistrations(false);
+        return;
+      }
+    }
+
+    setRegistrations([]);
+    alert("All sign ups have been reset. Registration count is now 0.");
+  }
+
   function resetDemoData() {
     const answer = window.confirm("Reset all local test data back to the starter sample?");
     if (!answer) return;
@@ -907,7 +937,7 @@ export default function App() {
               </section>
             )}
 
-            <div className="layout-grid wide">
+            <div className="layout-grid wide compact-main-grid">
               <section
                 className="panel"
                 onDragOver={handleDragOverPlayer}
@@ -957,26 +987,26 @@ export default function App() {
                     />
                   ))}
                 </div>
-              </section>
 
-              <section className="panel">
-                <div className="panel-title">
-                  <h2>Weapon Count</h2>
-                  <span>{weaponCounts.length}</span>
-                </div>
-
-                {weaponCounts.length === 0 ? (
-                  <div className="empty">No weapons selected.</div>
-                ) : (
-                  <div className="weapon-list">
-                    {weaponCounts.map(([weapon, count]) => (
-                      <div key={weapon} className="weapon-row">
-                        <span>{weapon}</span>
-                        <strong>{count}</strong>
-                      </div>
-                    ))}
+                <div className="weapon-summary-horizontal">
+                  <div className="panel-title compact-title">
+                    <h2>Weapon Count</h2>
+                    <span>{weaponCounts.length}</span>
                   </div>
-                )}
+
+                  {weaponCounts.length === 0 ? (
+                    <div className="empty compact-empty">No weapons selected.</div>
+                  ) : (
+                    <div className="weapon-list horizontal">
+                      {weaponCounts.map(([weapon, count]) => (
+                        <div key={weapon} className="weapon-row horizontal">
+                          <span>{weapon}</span>
+                          <strong>{count}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </section>
             </div>
           </>
@@ -1165,6 +1195,9 @@ export default function App() {
                     </button>
                     <button type="button" className="danger-btn padded" onClick={clearAssignmentsForDay}>
                       Clear {activeDay} {activeEvent}
+                    </button>
+                    <button type="button" className="danger-btn padded" onClick={resetAllSignUps}>
+                      Reset Sign Ups
                     </button>
                     <button type="button" className="secondary-btn" onClick={logoutAdmin}>
                       Logout

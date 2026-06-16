@@ -1159,3 +1159,369 @@ code {
     position: static;
   }
 }
+
+/* v14 compact fit-to-page layout */
+body {
+  font-size: 11px;
+}
+
+.topbar {
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+.brand {
+  font-size: 15px;
+}
+
+.subtitle {
+  font-size: 9px;
+  margin-top: 2px;
+}
+
+.nav {
+  gap: 5px;
+}
+
+.nav-btn,
+.day-btn,
+.event-btn,
+.primary-btn,
+.secondary-btn,
+.danger-btn {
+  border-radius: 7px;
+  font-size: 10px;
+}
+
+.nav-btn {
+  padding: 6px 8px;
+}
+
+.page {
+  width: min(1600px, 100%);
+  padding: 10px 12px;
+}
+
+.hero-card,
+.form-card,
+.panel,
+.warning-card,
+.summary-box {
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+.hero-card {
+  padding: 12px;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+
+.hero-card h1,
+.form-card h1 {
+  font-size: 23px;
+  margin-bottom: 3px;
+}
+
+.hero-card p,
+.form-card p,
+.admin-header p {
+  font-size: 10px;
+}
+
+.day-tabs,
+.event-tabs {
+  gap: 4px;
+}
+
+.day-btn {
+  padding: 6px 10px;
+}
+
+.event-btn {
+  padding: 5px 8px;
+}
+
+.summary-row {
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.summary-box {
+  padding: 7px;
+}
+
+.summary-box span {
+  font-size: 8px;
+}
+
+.summary-box strong {
+  font-size: 16px;
+  margin-top: 2px;
+}
+
+.warning-card {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 10px;
+}
+
+.layout-grid.wide.compact-main-grid {
+  grid-template-columns: minmax(230px, 0.75fr) minmax(620px, 2.25fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.panel {
+  padding: 8px;
+  min-height: 0;
+}
+
+.panel-title {
+  margin-bottom: 6px;
+}
+
+.panel-title h2 {
+  font-size: 13px;
+}
+
+.panel-title span {
+  padding: 2px 7px;
+  font-size: 10px;
+}
+
+.player-list {
+  gap: 6px;
+}
+
+.player-card {
+  padding: 7px;
+  border-radius: 10px;
+}
+
+.player-top {
+  gap: 5px;
+}
+
+.player-meta {
+  font-size: 9px;
+  margin-top: 3px;
+}
+
+.player-weapons {
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.player-weapons span {
+  padding: 3px 6px;
+  font-size: 8px;
+}
+
+.player-notes {
+  font-size: 9px;
+  margin-top: 5px;
+}
+
+.duplicate-note,
+.duplicate-pill {
+  font-size: 8px;
+  padding: 3px 6px;
+  margin-top: 5px;
+}
+
+.role {
+  font-size: 8px;
+  padding: 3px 6px;
+}
+
+.empty,
+.team-empty {
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 10px;
+}
+
+.team-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.team-box {
+  padding: 6px;
+  border-radius: 10px;
+}
+
+.team-box-title {
+  margin-bottom: 4px;
+}
+
+.team-box-title strong {
+  font-size: 11px;
+}
+
+.team-box-title span {
+  padding: 2px 6px;
+  font-size: 8px;
+}
+
+.team-player-line {
+  padding: 5px;
+  gap: 3px 5px;
+  border-radius: 7px;
+  margin-top: 4px;
+}
+
+.team-player-line small {
+  font-size: 9px;
+}
+
+.assigned-row,
+.weapon-row {
+  padding: 6px;
+  gap: 6px;
+}
+
+.drag-hint {
+  padding: 5px 7px;
+  margin-bottom: 6px;
+  font-size: 9px;
+  border-radius: 7px;
+}
+
+.weapon-summary-horizontal {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.compact-title {
+  margin-bottom: 5px;
+}
+
+.weapon-list.horizontal {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.weapon-row.horizontal {
+  justify-content: center;
+  min-width: 130px;
+  flex: 0 1 auto;
+  border-radius: 999px;
+  padding: 5px 8px;
+}
+
+.weapon-row.horizontal span {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weapon-row.horizontal strong {
+  background: #334155;
+  border-radius: 999px;
+  min-width: 20px;
+  padding: 1px 6px;
+  text-align: center;
+}
+
+.form-card {
+  padding: 14px;
+}
+
+.form-grid {
+  margin-top: 10px;
+  gap: 8px;
+}
+
+label {
+  gap: 4px;
+  font-size: 10px;
+}
+
+input,
+select,
+textarea {
+  border-radius: 7px;
+  padding: 7px 8px;
+  font-size: 10px;
+}
+
+textarea {
+  min-height: 58px;
+}
+
+.primary-btn {
+  padding: 8px 12px;
+}
+
+.secondary-btn {
+  padding: 6px 8px;
+}
+
+.event-checkbox-list {
+  gap: 5px;
+}
+
+.event-check {
+  padding: 5px 6px;
+  border-radius: 7px;
+}
+
+.admin-overview-layout {
+  gap: 10px;
+}
+
+.overview-card {
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.overview-head {
+  margin-bottom: 8px;
+}
+
+.overview-pills span,
+.legend-row span {
+  padding: 4px 7px;
+  font-size: 10px;
+}
+
+.overview-table {
+  font-size: 10px;
+  min-width: 780px;
+}
+
+.overview-table th,
+.overview-table td {
+  padding: 6px;
+}
+
+.status {
+  font-size: 11px;
+}
+
+.footer {
+  padding: 8px;
+  font-size: 9px;
+}
+
+@media (max-width: 1200px) {
+  .team-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .layout-grid.wide.compact-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .team-grid {
+    grid-template-columns: 1fr;
+  }
+}
