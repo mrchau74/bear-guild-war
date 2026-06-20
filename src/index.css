@@ -1525,3 +1525,127 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Admin player identity editing */
+.admin-name-display {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.admin-name-display strong,
+.admin-name-display small {
+  display: block;
+}
+
+.admin-name-edit {
+  display: grid;
+  gap: 6px;
+  min-width: 190px;
+}
+
+.admin-name-edit label {
+  gap: 3px;
+  font-size: 9px;
+}
+
+.admin-name-edit input {
+  height: 30px;
+  padding: 5px 7px;
+  font-size: 10px;
+}
+
+.name-edit-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Full player edit panel in Admin table */
+.row-actions-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-edit-row td {
+  background: rgba(8, 17, 31, 0.78);
+  padding: 10px !important;
+}
+
+.admin-full-edit-card {
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  background: rgba(15, 23, 42, 0.96);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.admin-full-edit-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  color: #e5e7eb;
+}
+
+.admin-full-edit-head span {
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.admin-full-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.admin-full-edit-grid label,
+.full-edit-notes {
+  font-size: 10px;
+  gap: 5px;
+}
+
+.admin-full-edit-grid input,
+.admin-full-edit-grid select {
+  height: 34px;
+  padding: 6px 8px;
+  font-size: 11px;
+}
+
+.admin-full-availability {
+  display: grid;
+  grid-template-columns: 0.55fr 1fr 1fr;
+  gap: 10px;
+}
+
+.compact-card {
+  padding: 10px;
+}
+
+.full-edit-notes textarea {
+  min-height: 66px;
+  font-size: 11px;
+}
+
+.full-edit-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 1100px) {
+  .admin-full-edit-grid,
+  .admin-full-availability {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-full-edit-grid,
+  .admin-full-availability {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import "./index.css";
 
@@ -238,6 +238,8 @@ export default function App() {
   const [form, setForm] = useState(emptyForm());
   const [adminUnlocked, setAdminUnlocked] = useState(() => localStorage.getItem(ADMIN_KEY) === "true");
   const [adminPassword, setAdminPassword] = useState("");
+  const [editingPlayerId, setEditingPlayerId] = useState(null);
+  const [editPlayerDraft, setEditPlayerDraft] = useState(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -527,7 +529,7 @@ export default function App() {
       return;
     }
 
-    alert("Wrong password. Admin password is BEAR.");
+    alert("Wrong password.");
   }
 
   function logoutAdmin() {
@@ -596,6 +598,124 @@ export default function App() {
 
     setRegistrations(nextRegistrations);
     if (changedPlayer) await syncOnePlayer(changedPlayer);
+  }
+
+  function startEditPlayer(player) {
+    setEditingPlayerId(player.id);
+    setEditPlayerDraft({
+      playerName: player.playerName || "",
+      discordName: player.discordName || "",
+      role: player.role || "DPS",
+      weapon1: player.weapon1 || "Nameless Sword",
+      weapon2: player.weapon2 || "Strategic Sword",
+      scrim: Boolean(player.scrim),
+      saturday: Boolean(player.saturday),
+      sunday: Boolean(player.sunday),
+      scrimEvents: Boolean(player.scrim) ? [SCRIM_EVENT] : [],
+      saturdayEvents: Array.isArray(player.saturdayEvents) ? [...player.saturdayEvents] : [],
+      sundayEvents: Array.isArray(player.sundayEvents) ? [...player.sundayEvents] : [],
+      notes: player.notes || "",
+    });
+  }
+
+  function cancelEditPlayer() {
+    setEditingPlayerId(null);
+    setEditPlayerDraft(null);
+  }
+
+  function updateEditPlayerDraft(field, value) {
+    setEditPlayerDraft((current) => {
+      if (!current) return current;
+      const next = { ...current, [field]: value };
+
+      if (field === "scrim") {
+        next.scrimEvents = value ? [SCRIM_EVENT] : [];
+      }
+
+      if (field === "saturday" && !value) {
+        next.saturdayEvents = [];
+      }
+
+      if (field === "sunday" && !value) {
+        next.sundayEvents = [];
+      }
+
+      return next;
+    });
+  }
+
+  function toggleEditDraftEvent(field, eventName, checked) {
+    setEditPlayerDraft((current) => {
+      if (!current) return current;
+      const currentEvents = Array.isArray(current[field]) ? current[field] : [];
+      const nextEvents = checked
+        ? [...new Set([...currentEvents, eventName])]
+        : currentEvents.filter((item) => item !== eventName);
+
+      return { ...current, [field]: nextEvents };
+    });
+  }
+
+  async function saveEditPlayer(id) {
+    if (!editPlayerDraft) return;
+
+    const cleanPlayerName = editPlayerDraft.playerName.trim();
+    const cleanDiscordName = editPlayerDraft.discordName.trim();
+
+    if (!cleanPlayerName) {
+      alert("Player name cannot be empty.");
+      return;
+    }
+
+    if (editPlayerDraft.saturday && editPlayerDraft.saturdayEvents.length === 0) {
+      alert("Please choose at least one Saturday option.");
+      return;
+    }
+
+    if (editPlayerDraft.sunday && editPlayerDraft.sundayEvents.length === 0) {
+      alert("Please choose at least one Sunday option.");
+      return;
+    }
+
+    let changedPlayer = null;
+    const nextRegistrations = registrations.map((player) => {
+      if (player.id !== id) return player;
+
+      changedPlayer = normalizePlayer({
+        ...player,
+        ...editPlayerDraft,
+        playerName: cleanPlayerName,
+        discordName: cleanDiscordName,
+        scrimEvents: editPlayerDraft.scrim ? [SCRIM_EVENT] : [],
+        saturdayEvents: editPlayerDraft.saturday ? editPlayerDraft.saturdayEvents : [],
+        sundayEvents: editPlayerDraft.sunday ? editPlayerDraft.sundayEvents : [],
+      });
+
+      const assignedAvailabilityField = changedPlayer.assignedDay
+        ? getAvailabilityFieldForDay(changedPlayer.assignedDay)
+        : "";
+      const assignedEventField = changedPlayer.assignedDay
+        ? getEventFieldForDay(changedPlayer.assignedDay)
+        : "";
+      const assignedEventList = assignedEventField && Array.isArray(changedPlayer[assignedEventField])
+        ? changedPlayer[assignedEventField]
+        : [];
+
+      if (
+        changedPlayer.assignedDay &&
+        (!changedPlayer[assignedAvailabilityField] || !assignedEventList.includes(changedPlayer.assignedEvent))
+      ) {
+        changedPlayer.assignedDay = "";
+        changedPlayer.assignedEvent = "";
+        changedPlayer.assignedTeam = "";
+      }
+
+      return changedPlayer;
+    });
+
+    setRegistrations(nextRegistrations);
+    if (changedPlayer) await syncOnePlayer(changedPlayer);
+    cancelEditPlayer();
   }
 
   async function assignPlayer(id, teamName, targetPlayerId = null) {
@@ -1216,8 +1336,6 @@ export default function App() {
             <h1>Admin</h1>
             {!adminUnlocked ? (
               <form onSubmit={loginAdmin} className="admin-login">
-                <p>Admin password:</p>
-                <code>BEAR</code>
                 <label>
                   Admin password
                   <input
@@ -1344,59 +1462,238 @@ export default function App() {
                               const isDuplicate = duplicateNames.includes(player.playerName.trim().toLowerCase());
 
                               return (
-                                <tr key={player.id} className={isDuplicate ? "duplicate-row" : ""}>
-                                  <td>
-                                    <strong>{player.playerName}</strong>
-                                    <small>@{player.discordName || "discord"}</small>
-                                  </td>
-                                  <td>
-                                    <select
-                                      value={player.role}
-                                      onChange={(event) => updatePlayer(player.id, "role", event.target.value)}
-                                    >
-                                      {roleOptions.map((role) => (
-                                        <option key={role}>{role}</option>
-                                      ))}
-                                    </select>
-                                  </td>
-                                  <td>
-                                    <select
-                                      value={teamValue}
-                                      disabled={!canAssignThisEvent}
-                                      onChange={(event) => assignPlayer(player.id, event.target.value)}
-                                    >
-                                      <option value="">Not assigned</option>
-                                      {activeTeamOptions.map((teamName) => (
-                                        <option key={teamName} value={teamName}>{teamName}</option>
-                                      ))}
-                                    </select>
-                                    {!canAssignThisEvent && <small>Not registered for selected match</small>}
-                                  </td>
-                                  {activeDayEvents.map((eventName) => {
-                                    const participating = eventList.includes(eventName);
-                                    const assignedToEvent =
-                                      player.assignedDay === activeDay &&
-                                      player.assignedEvent === eventName &&
-                                      player.assignedTeam;
-                                    return (
-                                      <td key={eventName} className={assignedToEvent ? "status assigned" : participating ? "status participating" : "status blank"}>
-                                        {assignedToEvent ? "A" : participating ? "P" : ""}
+                                <Fragment key={player.id}>
+                                  <tr className={isDuplicate ? "duplicate-row" : ""}>
+                                    <td>
+                                      <div className="admin-name-display">
+                                        <div>
+                                          <strong>{player.playerName}</strong>
+                                          <small>@{player.discordName || "discord"}</small>
+                                          <small>{player.weapon1} / {player.weapon2}</small>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className="secondary-btn small-btn"
+                                          onClick={() => startEditPlayer(player)}
+                                        >
+                                          Edit
+                                        </button>
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <select
+                                        value={player.role}
+                                        onChange={(event) => updatePlayer(player.id, "role", event.target.value)}
+                                      >
+                                        {roleOptions.map((role) => (
+                                          <option key={role}>{role}</option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                    <td>
+                                      <select
+                                        value={teamValue}
+                                        disabled={!canAssignThisEvent}
+                                        onChange={(event) => assignPlayer(player.id, event.target.value)}
+                                      >
+                                        <option value="">Not assigned</option>
+                                        {activeTeamOptions.map((teamName) => (
+                                          <option key={teamName} value={teamName}>{teamName}</option>
+                                        ))}
+                                      </select>
+                                      {!canAssignThisEvent && <small>Not registered for selected match</small>}
+                                    </td>
+                                    {activeDayEvents.map((eventName) => {
+                                      const participating = eventList.includes(eventName);
+                                      const assignedToEvent =
+                                        player.assignedDay === activeDay &&
+                                        player.assignedEvent === eventName &&
+                                        player.assignedTeam;
+                                      return (
+                                        <td key={eventName} className={assignedToEvent ? "status assigned" : participating ? "status participating" : "status blank"}>
+                                          {assignedToEvent ? "A" : participating ? "P" : ""}
+                                        </td>
+                                      );
+                                    })}
+                                    <td>
+                                      <textarea
+                                        value={player.notes}
+                                        onChange={(event) => updatePlayer(player.id, "notes", event.target.value)}
+                                        placeholder="Notes"
+                                      />
+                                    </td>
+                                    <td>
+                                      <div className="row-actions-stack">
+                                        <button
+                                          type="button"
+                                          className="secondary-btn small-btn"
+                                          onClick={() => startEditPlayer(player)}
+                                        >
+                                          Edit All
+                                        </button>
+                                        <button type="button" className="danger-btn small-btn" onClick={() => removePlayer(player.id)}>
+                                          Remove
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+
+                                  {editingPlayerId === player.id && editPlayerDraft && (
+                                    <tr className="admin-edit-row">
+                                      <td colSpan={activeDayEvents.length + 5}>
+                                        <div className="admin-full-edit-card">
+                                          <div className="admin-full-edit-head">
+                                            <strong>Edit full player registration</strong>
+                                            <span>Update name, Discord, role, weapons, availability, games, and notes.</span>
+                                          </div>
+
+                                          <div className="admin-full-edit-grid">
+                                            <label>
+                                              Player name
+                                              <input
+                                                value={editPlayerDraft.playerName}
+                                                onChange={(event) => updateEditPlayerDraft("playerName", event.target.value)}
+                                                placeholder="Player name"
+                                              />
+                                            </label>
+
+                                            <label>
+                                              Discord name
+                                              <input
+                                                value={editPlayerDraft.discordName}
+                                                onChange={(event) => updateEditPlayerDraft("discordName", event.target.value)}
+                                                placeholder="Discord name"
+                                              />
+                                            </label>
+
+                                            <label>
+                                              Main role
+                                              <select
+                                                value={editPlayerDraft.role}
+                                                onChange={(event) => updateEditPlayerDraft("role", event.target.value)}
+                                              >
+                                                {roleOptions.map((role) => (
+                                                  <option key={role}>{role}</option>
+                                                ))}
+                                              </select>
+                                            </label>
+
+                                            <label>
+                                              Weapon 1
+                                              <select
+                                                value={editPlayerDraft.weapon1}
+                                                onChange={(event) => updateEditPlayerDraft("weapon1", event.target.value)}
+                                              >
+                                                {weaponOptions.map((weapon) => (
+                                                  <option key={weapon}>{weapon}</option>
+                                                ))}
+                                              </select>
+                                            </label>
+
+                                            <label>
+                                              Weapon 2
+                                              <select
+                                                value={editPlayerDraft.weapon2}
+                                                onChange={(event) => updateEditPlayerDraft("weapon2", event.target.value)}
+                                              >
+                                                {weaponOptions.map((weapon) => (
+                                                  <option key={weapon}>{weapon}</option>
+                                                ))}
+                                              </select>
+                                            </label>
+                                          </div>
+
+                                          <div className="admin-full-availability">
+                                            <div className="availability-card compact-card">
+                                              <label className="check-label">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={editPlayerDraft.scrim}
+                                                  onChange={(event) => updateEditPlayerDraft("scrim", event.target.checked)}
+                                                />
+                                                Scrim
+                                              </label>
+                                            </div>
+
+                                            <div className="availability-card compact-card">
+                                              <label className="check-label">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={editPlayerDraft.saturday}
+                                                  onChange={(event) => updateEditPlayerDraft("saturday", event.target.checked)}
+                                                />
+                                                Saturday
+                                              </label>
+                                              <div className="event-checkbox-list">
+                                                {eventOptions.map((eventName) => (
+                                                  <label key={eventName} className="check-label compact event-check">
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={editPlayerDraft.saturdayEvents.includes(eventName)}
+                                                      disabled={!editPlayerDraft.saturday}
+                                                      onChange={(event) => toggleEditDraftEvent("saturdayEvents", eventName, event.target.checked)}
+                                                    />
+                                                    {eventName}
+                                                  </label>
+                                                ))}
+                                              </div>
+                                            </div>
+
+                                            <div className="availability-card compact-card">
+                                              <label className="check-label">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={editPlayerDraft.sunday}
+                                                  onChange={(event) => updateEditPlayerDraft("sunday", event.target.checked)}
+                                                />
+                                                Sunday
+                                              </label>
+                                              <div className="event-checkbox-list">
+                                                {eventOptions.map((eventName) => (
+                                                  <label key={eventName} className="check-label compact event-check">
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={editPlayerDraft.sundayEvents.includes(eventName)}
+                                                      disabled={!editPlayerDraft.sunday}
+                                                      onChange={(event) => toggleEditDraftEvent("sundayEvents", eventName, event.target.checked)}
+                                                    />
+                                                    {eventName}
+                                                  </label>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <label className="full-edit-notes">
+                                            Notes
+                                            <textarea
+                                              value={editPlayerDraft.notes}
+                                              onChange={(event) => updateEditPlayerDraft("notes", event.target.value)}
+                                              placeholder="Notes"
+                                            />
+                                          </label>
+
+                                          <div className="name-edit-actions full-edit-actions">
+                                            <button
+                                              type="button"
+                                              className="secondary-btn small-btn"
+                                              onClick={() => saveEditPlayer(player.id)}
+                                            >
+                                              Save All
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="danger-btn small-btn"
+                                              onClick={cancelEditPlayer}
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        </div>
                                       </td>
-                                    );
-                                  })}
-                                  <td>
-                                    <textarea
-                                      value={player.notes}
-                                      onChange={(event) => updatePlayer(player.id, "notes", event.target.value)}
-                                      placeholder="Notes"
-                                    />
-                                  </td>
-                                  <td>
-                                    <button type="button" className="danger-btn small-btn" onClick={() => removePlayer(player.id)}>
-                                      Remove
-                                    </button>
-                                  </td>
-                                </tr>
+                                    </tr>
+                                  )}
+                                </Fragment>
                               );
                             })
                           )}
