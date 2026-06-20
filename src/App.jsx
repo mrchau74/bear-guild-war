@@ -454,6 +454,25 @@ export default function App() {
     });
   }
 
+  function toggleFormDay(day, checked) {
+    if (day === "saturday") {
+      setForm((current) => ({
+        ...current,
+        saturday: checked,
+        saturdayEvents: checked && current.saturdayEvents.length === 0 ? ["League Game"] : current.saturdayEvents,
+      }));
+      return;
+    }
+
+    if (day === "sunday") {
+      setForm((current) => ({
+        ...current,
+        sunday: checked,
+        sundayEvents: checked && current.sundayEvents.length === 0 ? ["League Game"] : current.sundayEvents,
+      }));
+    }
+  }
+
   function togglePlayerEvent(playerId, dayField, eventName, checked) {
     const player = registrations.find((item) => item.id === playerId);
     if (!player) return;
@@ -1193,9 +1212,9 @@ export default function App() {
             <h1>Registration Form</h1>
             <p>Members submit this form themselves. Admin can adjust later.</p>
 
-            <form onSubmit={submitRegistration} className="form-grid">
+            <form onSubmit={submitRegistration} className="form-grid register-form-grid">
               <label>
-                Player name
+                <span className="field-title">Player name <span className="required">*</span></span>
                 <input
                   value={form.playerName}
                   onChange={(event) => updateForm("playerName", event.target.value)}
@@ -1204,16 +1223,16 @@ export default function App() {
               </label>
 
               <label>
-                Discord name
+                <span className="field-title">Discord name</span>
                 <input
                   value={form.discordName}
                   onChange={(event) => updateForm("discordName", event.target.value)}
-                  placeholder="Your Discord name"
+                  placeholder="Example: bearplayer"
                 />
               </label>
 
-              <label>
-                Main role
+              <label className="full register-role-field">
+                <span className="field-title">Main role</span>
                 <select
                   value={form.role}
                   onChange={(event) => updateForm("role", event.target.value)}
@@ -1224,57 +1243,52 @@ export default function App() {
                 </select>
               </label>
 
-              <label>
-                Weapon 1
-                <select
-                  value={form.weapon1}
-                  onChange={(event) => updateForm("weapon1", event.target.value)}
-                >
-                  {weaponOptions.map((weapon) => (
-                    <option key={weapon}>{weapon}</option>
-                  ))}
-                </select>
-              </label>
+              <div className="register-weapon-row full">
+                <label>
+                  <span className="field-title">Weapon 1</span>
+                  <select
+                    value={form.weapon1}
+                    onChange={(event) => updateForm("weapon1", event.target.value)}
+                  >
+                    {weaponOptions.map((weapon) => (
+                      <option key={weapon}>{weapon}</option>
+                    ))}
+                  </select>
+                </label>
 
-              <label>
-                Weapon 2
-                <select
-                  value={form.weapon2}
-                  onChange={(event) => updateForm("weapon2", event.target.value)}
-                >
-                  {weaponOptions.map((weapon) => (
-                    <option key={weapon}>{weapon}</option>
-                  ))}
-                </select>
-              </label>
+                <label>
+                  <span className="field-title">Weapon 2</span>
+                  <select
+                    value={form.weapon2}
+                    onChange={(event) => updateForm("weapon2", event.target.value)}
+                  >
+                    {weaponOptions.map((weapon) => (
+                      <option key={weapon}>{weapon}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
 
-              <div className="availability-grid full">
-                <div className="availability-card">
-                  <label className="check-label">
-                    <input
-                      type="checkbox"
-                      checked={form.scrim}
-                      onChange={(event) => updateForm("scrim", event.target.checked)}
-                    />
-                    Available Scrim
-                  </label>
-                  <div className="event-checkbox-list single-option">
-                    <label className="check-label compact event-check">
-                      <input type="checkbox" checked={form.scrim} readOnly />
-                      Scrim
-                    </label>
-                  </div>
-                </div>
+              <div className="register-availability-stack full">
+                <label className="check-label register-simple-day-check register-scrim-check">
+                  <input
+                    type="checkbox"
+                    checked={form.scrim}
+                    onChange={(event) => updateForm("scrim", event.target.checked)}
+                  />
+                  Scrim
+                </label>
 
-                <div className="availability-card">
-                  <label className="check-label">
+                <div className="register-event-card">
+                  <label className="check-label register-day-title-check">
                     <input
                       type="checkbox"
                       checked={form.saturday}
-                      onChange={(event) => updateForm("saturday", event.target.checked)}
+                      onChange={(event) => toggleFormDay("saturday", event.target.checked)}
                     />
-                    Available Saturday
+                    Saturday
                   </label>
+
                   <div className="event-checkbox-list">
                     {eventOptions.map((eventName) => (
                       <label key={eventName} className="check-label compact event-check">
@@ -1290,15 +1304,16 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="availability-card">
-                  <label className="check-label">
+                <div className="register-event-card">
+                  <label className="check-label register-day-title-check">
                     <input
                       type="checkbox"
                       checked={form.sunday}
-                      onChange={(event) => updateForm("sunday", event.target.checked)}
+                      onChange={(event) => toggleFormDay("sunday", event.target.checked)}
                     />
-                    Available Sunday
+                    Sunday
                   </label>
+
                   <div className="event-checkbox-list">
                     {eventOptions.map((eventName) => (
                       <label key={eventName} className="check-label compact event-check">
@@ -1316,7 +1331,7 @@ export default function App() {
               </div>
 
               <label className="full">
-                Notes
+                <span className="field-title">Notes</span>
                 <textarea
                   value={form.notes}
                   onChange={(event) => updateForm("notes", event.target.value)}

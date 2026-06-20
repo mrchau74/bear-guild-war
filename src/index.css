@@ -1649,3 +1649,78 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Registration form mirrors the separate signup website */
+.register-form-grid {
+  align-items: end;
+  gap: 14px;
+}
+
+.field-title {
+  min-height: 18px;
+  line-height: 18px;
+  color: #cbd5e1;
+  display: inline-block;
+}
+
+.required {
+  color: #fb923c;
+}
+
+.register-role-field {
+  max-width: calc(50% - 7px);
+}
+
+.register-weapon-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.register-availability-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.register-simple-day-check,
+.register-event-card {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(8, 15, 31, 0.78);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.register-scrim-check,
+.register-day-title-check {
+  color: #fed7aa;
+  font-weight: 1000;
+}
+
+.register-event-card {
+  display: grid;
+  gap: 12px;
+}
+
+.register-form-grid input,
+.register-form-grid select,
+.register-form-grid textarea {
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.register-form-grid .event-check {
+  border-radius: 12px;
+  padding: 9px 10px;
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .register-role-field {
+    max-width: none;
+  }
+
+  .register-weapon-row {
+    grid-template-columns: 1fr;
+  }
+}
