@@ -1,16 +1,29 @@
-# React + Vite
+# BEAR Guild War Admin
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Main admin/team planner website for BEAR Guild War.
 
-Currently, two official plugins are available:
+## Changes in this version
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Adds **Scrim** as a separate top-level tab in the admin planner.
+- Scrim is treated as one event only.
+- Saturday and Sunday keep League Game / Game 1 / Game 2 / Game 3 / Game 4.
+- Reads and writes `scrim_games` from Supabase.
 
-## React Compiler
+## Deploy
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Use this folder as the Vercel project root.
 
-## Expanding the ESLint configuration
+Environment variables needed:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+## Supabase SQL
+
+Run this once if you have not already:
+
+```sql
+alter table registrations add column if not exists scrim_games text[] default '{}';
+```

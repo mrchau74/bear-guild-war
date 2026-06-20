@@ -22,7 +22,8 @@ const weaponOptions = [
 ];
 
 const roleOptions = ["Tank", "DPS", "Healer"];
-const days = ["Saturday", "Sunday"];
+const days = ["Scrim", "Saturday", "Sunday"];
+const SCRIM_EVENT = "Scrim";
 const eventOptions = ["League Game", "Game 1", "Game 2", "Game 3", "Game 4"];
 const DEFAULT_TEAMS = ["Offense 1", "Offense 2", "Offense 3", "Defense A", "Defense B", "Defense C"];
 const STORAGE_KEY = "bear-guild-war-v8";
@@ -37,8 +38,10 @@ const starterRegistrations = [
     role: "Tank",
     weapon1: "Thundercry Blade",
     weapon2: "Stormbreaker",
+    scrim: true,
     saturday: true,
     sunday: true,
+    scrimEvents: [SCRIM_EVENT],
     saturdayEvents: ["League Game"],
     sundayEvents: ["League Game"],
     notes: "Main tank",
@@ -54,8 +57,10 @@ function emptyForm() {
     role: "DPS",
     weapon1: "Nameless Sword",
     weapon2: "Strategic Sword",
+    scrim: false,
     saturday: true,
     sunday: false,
+    scrimEvents: [],
     saturdayEvents: ["League Game"],
     sundayEvents: [],
     notes: "",
@@ -67,6 +72,26 @@ function getRoleStyle(role) {
   return "role dps";
 }
 
+function getEventsForDay(day) {
+  return day === "Scrim" ? [SCRIM_EVENT] : eventOptions;
+}
+
+function getEventFieldForDay(day) {
+  if (day === "Scrim") return "scrimEvents";
+  if (day === "Saturday") return "saturdayEvents";
+  return "sundayEvents";
+}
+
+function getAvailabilityFieldForDay(day) {
+  if (day === "Scrim") return "scrim";
+  if (day === "Saturday") return "saturday";
+  return "sunday";
+}
+
+function isValidAssignedEvent(day, eventName) {
+  return getEventsForDay(day).includes(normalizeEventName(eventName));
+}
+
 function normalizeEventName(eventName) {
   return eventName === "League" ? "League Game" : eventName;
 }
@@ -75,12 +100,12 @@ function normalizeEventList(player, pluralField, legacyField, defaultList = []) 
   if (Array.isArray(player[pluralField])) {
     const cleaned = player[pluralField]
       .map(normalizeEventName)
-      .filter((eventName) => eventOptions.includes(eventName));
+      .filter((eventName) => eventOptions.includes(eventName) || eventName === SCRIM_EVENT);
     return cleaned.length ? [...new Set(cleaned)] : defaultList;
   }
 
   const legacyEvent = normalizeEventName(player[legacyField]);
-  if (eventOptions.includes(legacyEvent)) return [legacyEvent];
+  if (eventOptions.includes(legacyEvent) || legacyEvent === SCRIM_EVENT) return [legacyEvent];
 
   return defaultList;
 }
@@ -93,13 +118,15 @@ function normalizePlayer(player) {
     role: player.role || "DPS",
     weapon1: player.weapon1 || "Nameless Sword",
     weapon2: player.weapon2 || "Strategic Sword",
+    scrim: Boolean(player.scrim),
     saturday: Boolean(player.saturday),
     sunday: Boolean(player.sunday),
+    scrimEvents: normalizeEventList(player, "scrimEvents", "scrimEvent", []),
     saturdayEvents: normalizeEventList(player, "saturdayEvents", "saturdayEvent", ["League Game"]),
     sundayEvents: normalizeEventList(player, "sundayEvents", "sundayEvent", []),
     notes: player.notes || "",
     assignedDay: player.assignedDay || "",
-    assignedEvent: eventOptions.includes(normalizeEventName(player.assignedEvent)) ? normalizeEventName(player.assignedEvent) : "",
+    assignedEvent: isValidAssignedEvent(player.assignedDay, player.assignedEvent) ? normalizeEventName(player.assignedEvent) : "",
     assignedTeam: player.assignedTeam || "",
     sortOrder: Number.isFinite(Number(player.sortOrder)) ? Number(player.sortOrder) : 0,
   };
@@ -113,8 +140,10 @@ function rowToPlayer(row) {
     role: row.role,
     weapon1: row.weapon_1,
     weapon2: row.weapon_2,
+    scrim: Array.isArray(row.scrim_games) && row.scrim_games.length > 0,
     saturday: Array.isArray(row.saturday_games) && row.saturday_games.length > 0,
     sunday: Array.isArray(row.sunday_games) && row.sunday_games.length > 0,
+    scrimEvents: Array.isArray(row.scrim_games) ? row.scrim_games : [],
     saturdayEvents: Array.isArray(row.saturday_games) ? row.saturday_games : [],
     sundayEvents: Array.isArray(row.sunday_games) ? row.sunday_games : [],
     notes: row.notes,
@@ -133,6 +162,7 @@ function playerToRow(player, includeId = true) {
     weapon_1: player.weapon1 || "Nameless Sword",
     weapon_2: player.weapon2 || "Strategic Sword",
     notes: player.notes || "",
+    scrim_games: Array.isArray(player.scrimEvents) ? player.scrimEvents : [],
     saturday_games: Array.isArray(player.saturdayEvents) ? player.saturdayEvents : [],
     sunday_games: Array.isArray(player.sundayEvents) ? player.sundayEvents : [],
     assigned_day: player.assignedDay || "",
@@ -163,12 +193,13 @@ function getInitialRegistrations() {
 function normalizeTeamsByDay(value) {
   if (value && Array.isArray(value.Saturday) && Array.isArray(value.Sunday)) {
     return {
+      Scrim: Array.isArray(value.Scrim) && value.Scrim.length ? value.Scrim : DEFAULT_TEAMS,
       Saturday: value.Saturday.length ? value.Saturday : DEFAULT_TEAMS,
       Sunday: value.Sunday.length ? value.Sunday : DEFAULT_TEAMS,
     };
   }
 
-  return { Saturday: DEFAULT_TEAMS, Sunday: DEFAULT_TEAMS };
+  return { Scrim: DEFAULT_TEAMS, Saturday: DEFAULT_TEAMS, Sunday: DEFAULT_TEAMS };
 }
 
 function getInitialTeams() {
@@ -178,6 +209,7 @@ function getInitialTeams() {
       const parsed = JSON.parse(saved);
       if (parsed && Array.isArray(parsed.Saturday) && Array.isArray(parsed.Sunday)) {
         return {
+          Scrim: Array.isArray(parsed.Scrim) && parsed.Scrim.length ? parsed.Scrim : DEFAULT_TEAMS,
           Saturday: parsed.Saturday.length ? parsed.Saturday : DEFAULT_TEAMS,
           Sunday: parsed.Sunday.length ? parsed.Sunday : DEFAULT_TEAMS,
         };
@@ -188,6 +220,7 @@ function getInitialTeams() {
   }
 
   return {
+    Scrim: DEFAULT_TEAMS,
     Saturday: DEFAULT_TEAMS,
     Sunday: DEFAULT_TEAMS,
   };
@@ -247,26 +280,25 @@ export default function App() {
   }, [adminUnlocked]);
 
   const activeTeamOptions = teamsByDay[activeDay] || DEFAULT_TEAMS;
-
-  const activeEventField = activeDay === "Saturday" ? "saturdayEvents" : "sundayEvents";
+  const activeDayEvents = getEventsForDay(activeDay);
+  const dayEventField = getEventFieldForDay(activeDay);
+  const dayAvailabilityField = getAvailabilityFieldForDay(activeDay);
 
   const visibleRegistrations = useMemo(() => {
     return registrations.filter((player) => {
-      const available = activeDay === "Saturday" ? player.saturday : player.sunday;
-      const eventList = Array.isArray(player[activeEventField]) ? player[activeEventField] : [];
+      const available = Boolean(player[dayAvailabilityField]);
+      const eventList = Array.isArray(player[dayEventField]) ? player[dayEventField] : [];
       return available && eventList.includes(activeEvent);
     });
-  }, [registrations, activeDay, activeEvent, activeEventField]);
-
-  const dayEventField = activeDay === "Saturday" ? "saturdayEvents" : "sundayEvents";
+  }, [registrations, activeDay, activeEvent, dayEventField, dayAvailabilityField]);
 
   const dayRegistrations = useMemo(() => {
     return registrations.filter((player) => {
-      const available = activeDay === "Saturday" ? player.saturday : player.sunday;
+      const available = Boolean(player[dayAvailabilityField]);
       const eventList = Array.isArray(player[dayEventField]) ? player[dayEventField] : [];
       return available && eventList.length > 0;
     });
-  }, [registrations, activeDay, dayEventField]);
+  }, [registrations, activeDay, dayEventField, dayAvailabilityField]);
 
   const dayAssignedCount = dayRegistrations.filter(
     (player) => player.assignedDay === activeDay && player.assignedTeam
@@ -440,8 +472,8 @@ export default function App() {
       return;
     }
 
-    if (!form.saturday && !form.sunday) {
-      alert("Please choose at least Saturday or Sunday.");
+    if (!form.scrim && !form.saturday && !form.sunday) {
+      alert("Please choose Scrim, Saturday, or Sunday.");
       return;
     }
 
@@ -460,6 +492,7 @@ export default function App() {
       playerName: form.playerName.trim(),
       discordName: form.discordName.trim(),
       notes: form.notes.trim(),
+      scrimEvents: form.scrim ? [SCRIM_EVENT] : [],
       saturdayEvents: form.saturday ? form.saturdayEvents : [],
       sundayEvents: form.sunday ? form.sundayEvents : [],
       assignedDay: "",
@@ -505,6 +538,15 @@ export default function App() {
   function buildUpdatedPlayer(player, field, value) {
     const nextPlayer = { ...player, [field]: value };
 
+    if (field === "scrim") {
+      nextPlayer.scrimEvents = value ? [SCRIM_EVENT] : [];
+      if (!value && player.assignedDay === "Scrim") {
+        nextPlayer.assignedDay = "";
+        nextPlayer.assignedEvent = "";
+        nextPlayer.assignedTeam = "";
+      }
+    }
+
     if (field === "saturday") {
       nextPlayer.saturdayEvents = value ? nextPlayer.saturdayEvents : [];
       if (!value && player.assignedDay === "Saturday") {
@@ -521,6 +563,12 @@ export default function App() {
         nextPlayer.assignedEvent = "";
         nextPlayer.assignedTeam = "";
       }
+    }
+
+    if (field === "scrimEvents" && player.assignedDay === "Scrim" && !value.includes(player.assignedEvent)) {
+      nextPlayer.assignedDay = "";
+      nextPlayer.assignedEvent = "";
+      nextPlayer.assignedTeam = "";
     }
 
     if (field === "saturdayEvents" && player.assignedDay === "Saturday" && !value.includes(player.assignedEvent)) {
@@ -737,7 +785,9 @@ export default function App() {
     let changedPlayer = null;
     const nextRegistrations = registrations.map((player) => {
       if (player.id !== id) return player;
-      const dayField = day === "Saturday" ? "saturdayEvents" : "sundayEvents";
+      const dayField = getEventFieldForDay(day);
+      const availabilityField = getAvailabilityFieldForDay(day);
+      const targetEvent = day === "Scrim" ? SCRIM_EVENT : activeEvent;
       const eventList = Array.isArray(player[dayField]) ? player[dayField] : [];
 
       changedPlayer = {
@@ -745,9 +795,8 @@ export default function App() {
         assignedDay: "",
         assignedEvent: "",
         assignedTeam: "",
-        saturday: day === "Saturday" ? true : player.saturday,
-        sunday: day === "Sunday" ? true : player.sunday,
-        [dayField]: eventList.includes(activeEvent) ? eventList : [...eventList, activeEvent],
+        [availabilityField]: true,
+        [dayField]: eventList.includes(targetEvent) ? eventList : [...eventList, targetEvent],
       };
 
       return changedPlayer;
@@ -755,7 +804,7 @@ export default function App() {
 
     setRegistrations(nextRegistrations);
     if (changedPlayer) await syncOnePlayer(changedPlayer);
-    setActiveDay(day);
+    handleDayChange(day);
   }
 
   async function removePlayer(id) {
@@ -808,7 +857,7 @@ export default function App() {
     const answer = window.confirm("Reset all local test data back to the starter sample?");
     if (!answer) return;
     setRegistrations(starterRegistrations.map(normalizePlayer));
-    setTeamsByDay({ Saturday: DEFAULT_TEAMS, Sunday: DEFAULT_TEAMS });
+    setTeamsByDay({ Scrim: DEFAULT_TEAMS, Saturday: DEFAULT_TEAMS, Sunday: DEFAULT_TEAMS });
   }
 
   async function clearAssignmentsForDay() {
@@ -825,8 +874,13 @@ export default function App() {
     await syncAllPlayers(nextRegistrations);
   }
 
+  function handleDayChange(day) {
+    setActiveDay(day);
+    setActiveEvent(day === "Scrim" ? SCRIM_EVENT : "League Game");
+  }
+
   function copyDiscordPlan() {
-    const lines = [`**BEAR Guild War - ${activeDay} ${activeEvent}**`, ""];
+    const lines = [`**BEAR Guild War - ${activeDay}${activeDay === "Scrim" ? "" : ` ${activeEvent}`}**`, ""];
 
     activeTeamOptions.forEach((teamName) => {
       const teamPlayers = getTeamPlayers(teamName);
@@ -898,23 +952,25 @@ export default function App() {
                     <button
                       key={day}
                       className={activeDay === day ? "day-btn active" : "day-btn"}
-                      onClick={() => setActiveDay(day)}
+                      onClick={() => handleDayChange(day)}
                     >
                       {day}
                     </button>
                   ))}
                 </div>
-                <div className="event-tabs">
-                  {eventOptions.map((eventName) => (
-                    <button
-                      key={eventName}
-                      className={activeEvent === eventName ? "event-btn active" : "event-btn"}
-                      onClick={() => setActiveEvent(eventName)}
-                    >
-                      {eventName}
-                    </button>
-                  ))}
-                </div>
+                {activeDay !== "Scrim" && (
+                  <div className="event-tabs">
+                    {activeDayEvents.map((eventName) => (
+                      <button
+                        key={eventName}
+                        className={activeEvent === eventName ? "event-btn active" : "event-btn"}
+                        onClick={() => setActiveEvent(eventName)}
+                      >
+                        {eventName}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
 
@@ -1077,6 +1133,23 @@ export default function App() {
                   <label className="check-label">
                     <input
                       type="checkbox"
+                      checked={form.scrim}
+                      onChange={(event) => updateForm("scrim", event.target.checked)}
+                    />
+                    Available Scrim
+                  </label>
+                  <div className="event-checkbox-list single-option">
+                    <label className="check-label compact event-check">
+                      <input type="checkbox" checked={form.scrim} readOnly />
+                      Scrim
+                    </label>
+                  </div>
+                </div>
+
+                <div className="availability-card">
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
                       checked={form.saturday}
                       onChange={(event) => updateForm("saturday", event.target.checked)}
                     />
@@ -1172,23 +1245,25 @@ export default function App() {
                           <button
                             key={day}
                             className={activeDay === day ? "day-btn active" : "day-btn"}
-                            onClick={() => setActiveDay(day)}
+                            onClick={() => handleDayChange(day)}
                           >
                             {day}
                           </button>
                         ))}
                       </div>
-                      <div className="event-tabs small">
-                        {eventOptions.map((eventName) => (
-                          <button
-                            key={eventName}
-                            className={activeEvent === eventName ? "event-btn active" : "event-btn"}
-                            onClick={() => setActiveEvent(eventName)}
-                          >
-                            {eventName}
-                          </button>
-                        ))}
-                      </div>
+                      {activeDay !== "Scrim" && (
+                        <div className="event-tabs small">
+                          {activeDayEvents.map((eventName) => (
+                            <button
+                              key={eventName}
+                              className={activeEvent === eventName ? "event-btn active" : "event-btn"}
+                              onClick={() => setActiveEvent(eventName)}
+                            >
+                              {eventName}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <button type="button" className="secondary-btn" onClick={copyDiscordPlan}>
                       Copy Discord Plan
@@ -1210,7 +1285,7 @@ export default function App() {
                     <div className="overview-head">
                       <div>
                         <h2>{activeDay} ({dayRegistrations.length} registrations)</h2>
-                        <p className="small-muted">P = participating, A = assigned to a team. Use the selected match below when assigning a team.</p>
+                        <p className="small-muted">P = participating, A = assigned to a team. Use the selected match below when assigning a team. Scrim is a single match.</p>
                       </div>
                       <div className="overview-pills">
                         <span>Assigned: {dayAssignedCount}</span>
@@ -1219,17 +1294,19 @@ export default function App() {
                     </div>
 
                     <div className="overview-controls">
-                      <div className="event-tabs small">
-                        {eventOptions.map((eventName) => (
-                          <button
-                            key={eventName}
-                            className={activeEvent === eventName ? "event-btn active" : "event-btn"}
-                            onClick={() => setActiveEvent(eventName)}
-                          >
-                            {eventName}
-                          </button>
-                        ))}
-                      </div>
+                      {activeDay !== "Scrim" && (
+                        <div className="event-tabs small">
+                          {activeDayEvents.map((eventName) => (
+                            <button
+                              key={eventName}
+                              className={activeEvent === eventName ? "event-btn active" : "event-btn"}
+                              onClick={() => setActiveEvent(eventName)}
+                            >
+                              {eventName}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <div className="legend-row">
                         <span>P = Participating</span>
                         <span>A = Assigned</span>
@@ -1243,7 +1320,7 @@ export default function App() {
                             <th>Name</th>
                             <th>Primary Role</th>
                             <th>Team for {activeEvent}</th>
-                            {eventOptions.map((eventName) => (
+                            {activeDayEvents.map((eventName) => (
                               <th key={eventName}>{eventName}</th>
                             ))}
                             <th>Notes</th>
@@ -1253,7 +1330,7 @@ export default function App() {
                         <tbody>
                           {dayRegistrations.length === 0 ? (
                             <tr>
-                              <td colSpan={eventOptions.length + 5} className="empty-table-cell">
+                              <td colSpan={activeDayEvents.length + 5} className="empty-table-cell">
                                 No registrations for {activeDay} yet.
                               </td>
                             </tr>
@@ -1295,7 +1372,7 @@ export default function App() {
                                     </select>
                                     {!canAssignThisEvent && <small>Not registered for selected match</small>}
                                   </td>
-                                  {eventOptions.map((eventName) => {
+                                  {activeDayEvents.map((eventName) => {
                                     const participating = eventList.includes(eventName);
                                     const assignedToEvent =
                                       player.assignedDay === activeDay &&
@@ -1449,7 +1526,7 @@ function AdminPlayerRow({
   removePlayer,
   duplicateNames,
 }) {
-  const otherDay = activeDay === "Saturday" ? "Sunday" : "Saturday";
+  const otherDay = activeDay === "Saturday" ? "Sunday" : activeDay === "Sunday" ? "Saturday" : "Saturday";
   const isDuplicate = duplicateNames.includes(player.playerName.trim().toLowerCase());
 
   return (
@@ -1535,6 +1612,15 @@ function AdminPlayerRow({
       </div>
 
       <div className="admin-row-bottom">
+        <label className="check-label compact">
+          <input
+            type="checkbox"
+            checked={player.scrim}
+            onChange={(event) => updatePlayer(player.id, "scrim", event.target.checked)}
+          />
+          Scrim
+        </label>
+
         <label className="check-label compact">
           <input
             type="checkbox"
